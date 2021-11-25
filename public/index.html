@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width">
+        <title>Fingerpaint</title>
+        <script type="text/javascript" src="./js/paint.js"></script>
+        <link type="text/css" rel="stylesheet" href="./css/styles.css"/>
+        <script src = "/socket.io/socket.io.js"></script>
+        
+        <script>
+            const players = ['player1','player2']
+            const username = prompt(`What's your name ?`);
+            const secretWord = username === 'player1' ? prompt(`What are you going to draw ?` ) : undefined;
+
+
+            const isNotValidPlayer = !players.includes(username);
+
+            if(isNotValidPlayer) {
+               location.reload();
+            }
+
+            const socket = io(undefined,{
+               query:{
+                  username,
+                  secretWord,
+               }
+            });
+
+
+            let drawing = false;
+            let context;
+
+            window.onload = function () {
+
+            
+            if(username === 'player2'){
+               socket.on('playerDrawing',(e) => {
+                  const {clientX,clientY} = e;
+                  context.lineTo(e.clientX, e.clientY);
+                  context.closePath();
+                  context.stroke();
+                  context.moveTo(e.clientX, e.clientY);
+
+               });
+            }
+
+
+            function clearCanvas(){
+               context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+               context.beginPath();
+            }
+
+            socket.on('clearViewers',()=>{
+               clearCanvas();
+            })
+
+            document.getElementById('btnClear').addEventListener('click', () => {
+               if(username === 'player1'){
+                  clearCanvas();
+                  socket.emit('clear');
+               }
+            }, false);
+
+            // Back Button
+            document.getElementById('btnBack').addEventListener('click', () => {
+               document.getElementById('myCanvas').style.display = 'block';
+               document.getElementById('saveArea').style.display = 'none';
+               document.getElementById('tools').style.display = 'block';
+            }, false);
+
+
+            // Save
+            document.getElementById('btnSave').addEventListener('click', () => {
+               document.getElementById('myCanvas').style.display = 'none';
+               document.getElementById('saveArea').style.display = 'block';
+               document.getElementById('tools').style.display = 'none';
+
+               const dataURL = document.getElementById('myCanvas').toDataURL();
+               document.getElementById('canvasImg').src = dataURL;
+            }, false);
+
+            // Size Canvas
+            context = document.getElementById('myCanvas').getContext('2d');
+            context.canvas.width = window.innerWidth;
+            context.canvas.height = window.innerHeight - 60;
+
+            // Mouse movement
+            document.onmousemove = handleMouseMove;
+            document.onmousedown = handleDown;
+            document.onmouseup = handleUp;
+
+            // Style line
+            context.strokeStyle = '#000';
+            context.lineJoin = 'round';
+            context.lineWidth = 5;
+
+            // Hide Save Area
+            document.getElementById('saveArea').style.display = 'none';
+            };
+
+            function handleMouseMove(e) {
+               if (username === 'player2'){
+                  return;
+               }
+               
+               if (drawing) {
+                  context.lineTo(e.clientX, e.clientY);
+                  context.closePath();
+                  context.stroke();
+                  context.moveTo(e.clientX, e.clientY);
+                  const {clientX,clientY} = e;
+               
+                  socket.emit("drawing",{
+                     clientX,
+                     clientY,
+                     player:username
+                  });
+                  
+                  return;
+
+               } 
+               context.moveTo(e.clientX, e.clientY);
+               
+            }
+
+
+            function handleDown(e) {
+               drawing = !drawing;
+               context.moveTo(e.clientX, e.clientY);
+               context.beginPath();
+            }
+
+            function handleUp() {
+               drawing = !drawing;
+            }
+
+            function tryGuess(){
+               if (username === 'player1') return;
+               const word = prompt("Try to guess :DD ");
+               socket.emit('checkWord',{word});
+            }
+
+            socket.on('fail',(data)=>{
+               const {attempts} = data;
+               if(attempts){
+                  alert(`You failed. ${attempts} remaining attempts`)
+               }
+            })
+
+
+            socket.on('gameover',(data )=> {
+             
+               const {player} = data;
+
+               if (player === username){
+                  alert('You won!')
+               }else{
+                  alert('You lose :p')
+               }
+            })
+
+
+
+        </script>
+
+
+    </head>
+    <body>
+       <h1>
+          All the frontend and draw code is from this guy
+          https://youtu.be/_fyn91g6ZW4
+       </h1>
+        <canvas id="myCanvas"></canvas>
+        <div id="saveArea">
+            <img id="canvasImg" />
+            <h2>Right Click to Save...</h2>
+            <button id="btnBack">Back</button>
+        </div>
+        <div id="tools">
+            <table>
+            <tr>
+               <td><button id="btnSave">Save</button><button id="btnClear">Clear</button></td>
+               <td><button id="try" onclick="tryGuess()" >Try</button></td>
+            </tr>
+            </table>
+        </div>    
+    </body>
+</html>
